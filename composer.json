@@ -1,11 +1,11 @@
 {
-  "name":        "dreamfactory/df-ibmdb2",
-  "description": "The DreamFactory(tm) IBM DB2 Service.",
+  "name":        "dreamfactory/df-informix",
+  "description": "The DreamFactory(tm) IBM Informix Service.",
   "keywords":    [
     "dreamfactory",
     "api",
     "rest",
-    "ibm db2",
+    "informix",
     "sql",
     "database",
     "db"
@@ -24,8 +24,8 @@
   ],
   "support":     {
     "email":  "support@dreamfactory.com",
-    "source": "https://github.com/dreamfactorysoftware/df-ibmdb2",
-    "issues": "https://github.com/dreamfactorysoftware/df-ibmdb2/issues",
+    "source": "https://github.com/dreamfactorysoftware/df-informix",
+    "issues": "https://github.com/dreamfactorysoftware/df-informix/issues",
     "wiki":   "https://wiki.dreamfactory.com"
   },
   "require":     {
@@ -33,12 +33,12 @@
   },
   "autoload":    {
     "psr-4": {
-      "DreamFactory\\Core\\IbmDb2\\": "src/"
+      "DreamFactory\\Core\\Informix\\": "src/"
     }
   },
   "extra":       {
     "branch-alias": {
-      "dev-develop": "0.10.x-dev"
+      "dev-develop": "0.1.x-dev"
     }
   }
 }

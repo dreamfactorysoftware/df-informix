@@ -62,7 +62,6 @@ class InformixConnector extends Connector implements ConnectorInterface
         }
 
         $dsn .= "EnableScrollableCursors=1;";
-//        $dsn = "informix:host=127.0.0.1;service=ol_informix1210;database=stores_demo;server=ol_informix1210;protocol=onsoctcp;EnableScrollableCursors=1;";
 
         return $dsn;
     }
