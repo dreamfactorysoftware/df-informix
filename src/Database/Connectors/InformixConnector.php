@@ -10,7 +10,7 @@ class InformixConnector extends Connector implements ConnectorInterface
     /**
      * Establish a database connection.
      *
-     * @param  array  $config
+     * @param  array $config
      * @return \PDO
      */
     public function connect(array $config)
@@ -32,7 +32,7 @@ class InformixConnector extends Connector implements ConnectorInterface
     /**
      * Create a DSN string from a configuration.
      *
-     * @param  array   $config
+     * @param  array $config
      * @return string
      */
     protected function getDsn(array $config)
@@ -41,23 +41,28 @@ class InformixConnector extends Connector implements ConnectorInterface
 
         $dsn = "informix:";
 
-        if (!empty($host)){
+        if (!empty($host)) {
             $dsn .= "HOST={$host};";
         }
-        if (!empty($service)){
+        if (!empty($service)) {
             $dsn .= "SERVICE={$service};";
+        } elseif (!empty($port)) {
+            $dsn .= "SERVICE={$port};";
         }
-        if (!empty($server)){
+        if (!empty($server)) {
             $dsn .= "SERVER={$server};";
         }
-        if (!empty($database)){
+        if (!empty($database)) {
             $dsn .= "DATABASE={$database};";
         }
-        if (!empty($protocol)){
+        if (!empty($protocol)) {
             $dsn .= "PROTOCOL={$protocol};";
+        } else {
+            $dsn .= "PROTOCOL=onsoctcp;";
         }
 
-        $dsn = "informix:host=127.0.0.1;service=9088;database=stores_demo;server=ol_informix1210;protocol=onsoctcp;EnableScrollableCursors=1;";
+        $dsn .= "EnableScrollableCursors=1;";
+//        $dsn = "informix:host=127.0.0.1;service=ol_informix1210;database=stores_demo;server=ol_informix1210;protocol=onsoctcp;EnableScrollableCursors=1;";
 
         return $dsn;
     }

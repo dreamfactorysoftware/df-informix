@@ -8,24 +8,7 @@ use Illuminate\Database\Query\Builder;
 class InformixGrammar extends Grammar
 {
     /**
-     * Compile the "limit" portions of the query.
-     *
-     * @param  Builder $query
-     * @param  int     $limit
-     *
-     * @return string
-     */
-    protected function compileLimit(Builder $query, $limit)
-    {
-        return "FETCH FIRST $limit ROWS ONLY";
-    }
-
-    /**
-     * Compile a select query into SQL.
-     *
-     * @param Builder $query
-     *
-     * @return string
+     * @inheritdoc
      */
     public function compileSelect(Builder $query)
     {
@@ -33,128 +16,74 @@ class InformixGrammar extends Grammar
             $query->columns = ['*'];
         }
 
-        $components = $this->compileComponents($query);
+        //'select skip 1 first 3 "col1", "col2" from "my_table" where "col1" = 1';
 
-        // If an offset is present on the query, we will need to wrap the query in
-        // a big "ANSI" offset syntax block. This is very nasty compared to the
-        // other database systems but is necessary for implementing features.
-        if ($query->offset > 0) {
-            return $this->compileAnsiOffset($query, $components);
+        $compiled = $this->compileComponents($query);
+        $stmt = 'select';
+        if (isset($compiled['offset'])) {
+            $stmt .= ' ' . $compiled['offset'];
+            unset($compiled['offset']);
+        }
+        if (isset($compiled['limit'])) {
+            $stmt .= ' ' . $compiled['limit'];
+            unset($compiled['limit']);
         }
 
-        return $this->concatenate($components);
+        return $stmt . ' ' . trim($this->concatenate($compiled));
     }
 
     /**
-     * Create a full ANSI offset clause for the query.
-     *
-     * @param Builder $query
-     * @param array   $components
-     *
-     * @return string
+     * @inheritdoc
      */
-    protected function compileAnsiOffset(Builder $query, $components)
+    protected function compileAggregate(Builder $query, $aggregate)
     {
-        // An ORDER BY clause is required to make this offset query work, so if one does
-        // not exist we'll just create a dummy clause to trick the database and so it
-        // does not complain about the queries for not having an "order by" clause.
-        if (!isset($components['orders'])) {
-            $components['orders'] = 'order by 1';
+        $column = $this->columnize($aggregate['columns']);
+
+        // If the query has a "distinct" constraint and we're not asking for all columns
+        // we need to prepend "distinct" onto the column name so that the query takes
+        // it into account when it performs the aggregating operations on the data.
+        if ($query->distinct && $column !== '*') {
+            $column = 'distinct ' . $column;
         }
 
-        unset($components['limit']);
+        return $aggregate['function'] . '(' . $column . ') as aggregate';
+    }
 
-        // We need to add the row number to the query so we can compare it to the offset
-        // and limit values given for the statements. So we will add an expression to
-        // the "select" that will give back the row numbers on each of the records.
-        $orderings = $components['orders'];
-
-        $columns = (!empty($components['columns']) ? $components['columns'] . ', ' : 'select');
-
-        if ($columns == 'select *, ' && $query->from) {
-            $columns = 'select ' . $this->tablePrefix . $query->from . '.*, ';
+    /**
+     * @inheritdoc
+     */
+    protected function compileColumns(Builder $query, $columns)
+    {
+        // If the query is actually performing an aggregating select, we will let that
+        // compiler handle the building of the select clauses, as it will need some
+        // more syntax that is best handled by that function to keep things neat.
+        if (!is_null($query->aggregate)) {
+            return;
         }
 
-        $components['columns'] = $this->compileOver($orderings, $columns);
+        $select = $query->distinct ? 'distinct' : '';
 
-        unset($components['orders']);
-
-        // Next we need to calculate the constraints that should be placed on the query
-        // to get the right offset and limit from our query but if there is no limit
-        // set we will just handle the offset only since that is all that matters.
-        $start = $query->offset + 1;
-
-        $constraint = $this->compileRowConstraint($query);
-
-        $sql = $this->concatenate($components);
-
-        // We are now ready to build the final SQL query so we'll create a common table
-        // expression from the query and get the records with row numbers within our
-        // given limit and offset value that we just put on as a query constraint.
-        return $this->compileTableExpression($sql, $constraint);
+        return $select . $this->columnize($columns);
     }
 
     /**
-     * Compile the over statement for a table expression.
-     *
-     * @param string $orderings
-     * @param        $columns
-     *
-     * @return string
+     * @inheritdoc
      */
-    protected function compileOver($orderings, $columns)
+    protected function compileLimit(Builder $query, $limit)
     {
-        return "{$columns} row_number() over ({$orderings}) as row_num";
+        return 'first ' . (int)$limit;
     }
 
     /**
-     * @param $query
-     *
-     * @return string
-     */
-    protected function compileRowConstraint($query)
-    {
-        $start = $query->offset + 1;
-
-        if ($query->limit > 0) {
-            $finish = $query->offset + $query->limit;
-
-            return "between {$start} and {$finish}";
-        }
-
-        return ">= {$start}";
-    }
-
-    /**
-     * Compile a common table expression for a query.
-     *
-     * @param  string $sql
-     * @param  string $constraint
-     *
-     * @return string
-     */
-    protected function compileTableExpression($sql, $constraint)
-    {
-        return "select * from ({$sql}) as temp_table where row_num {$constraint}";
-    }
-
-    /**
-     * Compile the "offset" portions of the query.
-     *
-     * @param Builder $query
-     * @param int     $offset
-     *
-     * @return string
+     * @inheritdoc
      */
     protected function compileOffset(Builder $query, $offset)
     {
-        return '';
+        return 'skip ' . (int)$offset;
     }
 
     /**
-     * Get the format for database stored dates.
-     *
-     * @return string
+     * @inheritdoc
      */
     public function getDateFormat()
     {

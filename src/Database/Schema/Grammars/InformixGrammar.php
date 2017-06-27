@@ -16,6 +16,7 @@ class InformixGrammar extends Grammar
      * @var array
      */
     protected $preModifiers = ['ForColumn'];
+
     protected $modifiers = ['Nullable', 'Default', 'Generated', 'Increment', 'StartWith', 'Before', 'ImplicitlyHidden'];
 
     /**
