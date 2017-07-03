@@ -876,55 +876,10 @@ MYSQL;
         return $value;
     }
 
-    /**
-     * @inheritdoc
-     */
     protected function getFunctionStatement(RoutineSchema $routine, array $param_schemas, array &$values)
     {
-        switch ($routine->returnType) {
-            case DbSimpleTypes::TYPE_ROW:
-            case DbSimpleTypes::TYPE_TABLE:
-                $paramStr = $this->getRoutineParamString($param_schemas, $values);
+        $paramStr = $this->getRoutineParamString($param_schemas, $values);
 
-                return "SELECT * from TABLE({$routine->quotedName}($paramStr))";
-                break;
-            default:
-                return parent::getFunctionStatement($routine, $param_schemas, $values) . ' FROM SYSIBM.SYSDUMMY1';
-                break;
-        }
-    }
-
-    protected function doRoutineBinding($statement, array $paramSchemas, array &$values)
-    {
-        foreach ($paramSchemas as $key => $paramSchema) {
-            $pdoType = $this->extractPdoType($paramSchema->type);
-            switch ($paramSchema->paramType) {
-                case 'IN':
-                    $this->bindValue($statement, ':' . $paramSchema->name, array_get($values, $key));
-                    break;
-                case 'INOUT':
-                    if (empty($values[$key]) && (\PDO::PARAM_STR === $pdoType)) {
-                        $values[$key] = str_repeat(" ", $paramSchema->length);
-                    }
-                    $this->bindParam(
-                        $statement, ':' . $paramSchema->name,
-                        $values[$key],
-                        $pdoType | \PDO::PARAM_INPUT_OUTPUT,
-                        $paramSchema->length
-                    );
-                    break;
-                case 'OUT':
-                    if (empty($values[$key]) && (\PDO::PARAM_STR === $pdoType)) {
-                        $values[$key] = str_repeat(" ", $paramSchema->length);
-                    }
-                    $this->bindParam(
-                        $statement, ':' . $paramSchema->name,
-                        $values[$key],
-                        $pdoType,
-                        $paramSchema->length
-                    );
-                    break;
-            }
-        }
+        return "CALL {$routine->quotedName}($paramStr)";
     }
 }
