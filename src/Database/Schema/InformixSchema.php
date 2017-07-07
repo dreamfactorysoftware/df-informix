@@ -63,6 +63,11 @@ class InformixSchema extends SqlSchema
                 // check foreign tables
                 break;
 
+            case DbSimpleTypes::TYPE_TIME:
+                $info['type'] = 'datetime hour to fraction';
+                break;
+
+            case DbSimpleTypes::TYPE_DATETIME:
             case DbSimpleTypes::TYPE_TIMESTAMP:
                 $info['type'] = 'datetime year to fraction';
                 break;
@@ -87,14 +92,6 @@ class InformixSchema extends SqlSchema
             case DbSimpleTypes::TYPE_USER_ID_ON_CREATE:
             case DbSimpleTypes::TYPE_USER_ID_ON_UPDATE:
                 $info['type'] = 'integer';
-                break;
-
-            case DbSimpleTypes::TYPE_DATETIME:
-                $info['type'] = 'datetime year to second';
-                break;
-
-            case DbSimpleTypes::TYPE_TIME:
-                $info['type'] = 'datetime hour to second';
                 break;
 
             case DbSimpleTypes::TYPE_FLOAT:
@@ -331,9 +328,11 @@ CASE
             WHEN (sc.collength > 0) THEN MOD(sc.collength,256)::INT 
             ELSE MOD(sc.collength+65536,256)::INT 
         END 
+    WHEN (sc.coltype IN (10,266,14,270)) THEN  
+        (sc.collength / 256)::INT 
     ELSE 
-        NULL 
-END maxlength, 
+        sc.collength 
+END length, 
 CASE 
     WHEN (sc.coltype IN (13,269,16,272)) THEN  
         CASE 
@@ -344,17 +343,29 @@ CASE
         NULL 
 END minlength, 
 CASE 
-    WHEN (sc.coltype IN (5,261,8,264) AND (sc.collength / 256) >= 1) 
-        THEN (sc.collength / 256)::INT  
+    WHEN (sc.coltype IN (5,261,8,264) AND (sc.collength / 256) >= 1) THEN
+        (sc.collength / 256)::INT  
     ELSE 
         NULL 
 END precision, 
 CASE 
-    WHEN (sc.coltype IN (5,261,8,264) AND (MOD(sc.collength, 256) <> 255)) 
-        THEN MOD(sc.collength, 256)::INT  
+    WHEN (sc.coltype IN (5,261,8,264) AND (MOD(sc.collength, 256) <> 255)) THEN
+        MOD(sc.collength, 256)::INT  
     ELSE 
         NULL 
 END scale, 
+CASE 
+    WHEN (sc.coltype IN (10,266,14,270)) THEN 
+        (MOD(sc.collength,256) / 16)::INT 
+    ELSE 
+        NULL 
+END first_qualifier, 
+CASE 
+    WHEN (sc.coltype IN (10,266,14,270)) THEN  
+        MOD(MOD(sc.collength,256), 16)::INT 
+    ELSE 
+        NULL 
+END last_qualifier, 
 CASE  
     WHEN (sc.coltype < 256) THEN 'Y' 
     WHEN (sc.coltype BETWEEN 256 AND 309) THEN 'N' 
@@ -413,7 +424,7 @@ MYSQL;
         $c->isPrimaryKey = array_get($column, 'is_primary_key', false);
         $c->isUnique = array_get($column, 'is_unique', false);
         $c->dbType = $column['typename'];
-        $c->size = isset($column['collength']) ? intval($column['collength']) : null;
+        $c->size = isset($column['length']) ? intval($column['length']) : null;
         $c->precision = isset($column['precision']) ? intval($column['precision']) : null;
         $c->scale = isset($column['scale']) ? intval($column['scale']) : null;
         $c->autoIncrement = (false !== strpos($c->dbType, 'serial'));
@@ -421,6 +432,21 @@ MYSQL;
         $c->fixedLength = $this->extractFixedLength($c->dbType);
         $c->supportsMultibyte = $this->extractMultiByteSupport($c->dbType);
         $this->extractType($c, $c->dbType);
+        switch ($c->type) {
+            case DbSimpleTypes::TYPE_DATETIME:
+                $firstQualifier = (int)array_get($column, 'first_qualifier');
+                $lastQualifier = (int)array_get($column, 'last_qualifier');
+                if ($firstQualifier >= 6) {
+                    $c->type = DbSimpleTypes::TYPE_TIME;
+                } elseif ($lastQualifier <= 4) {
+                    $c->type = DbSimpleTypes::TYPE_DATE;
+                }
+                if ($lastQualifier > 10) {
+                    $c->precision = $lastQualifier - 10;
+                }
+            break;
+        }
+
         if (is_string($column['default'])) {
             $column['default'] = trim($column['default'], '\' ');
         }
@@ -853,6 +879,31 @@ MYSQL;
                     break;
             }
         }
+    }
+
+    public static function getNativeDateTimeFormat($type)
+    {
+        switch (strtolower(strval($type))) {
+            case DbSimpleTypes::TYPE_DATE:
+                return 'Y-m-d';
+
+            case DbSimpleTypes::TYPE_TIME:
+                return 'H:i:s.u';
+            case DbSimpleTypes::TYPE_TIME_TZ:
+                return 'H:i:s.u P';
+
+            case DbSimpleTypes::TYPE_DATETIME:
+            case DbSimpleTypes::TYPE_TIMESTAMP:
+            case DbSimpleTypes::TYPE_TIMESTAMP_ON_CREATE:
+            case DbSimpleTypes::TYPE_TIMESTAMP_ON_UPDATE:
+                return 'Y-m-d H:i:s.u';
+
+            case DbSimpleTypes::TYPE_DATETIME_TZ:
+            case DbSimpleTypes::TYPE_TIMESTAMP_TZ:
+                return 'Y-m-d H:i:s.u P';
+        }
+
+        return null;
     }
 
     public function getTimestampForSet()
