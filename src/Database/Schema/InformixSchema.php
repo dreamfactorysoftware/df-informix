@@ -7,21 +7,15 @@ use DreamFactory\Core\Database\Schema\FunctionSchema;
 use DreamFactory\Core\Database\Schema\ParameterSchema;
 use DreamFactory\Core\Database\Schema\ProcedureSchema;
 use DreamFactory\Core\Database\Schema\RoutineSchema;
-use DreamFactory\Core\Database\Components\Schema;
 use DreamFactory\Core\Database\Schema\TableSchema;
-use DreamFactory\Core\Enums\DbResourceTypes;
 use DreamFactory\Core\Enums\DbSimpleTypes;
+use DreamFactory\Core\SqlDb\Database\Schema\SqlSchema;
 
 /**
  * Schema is the class for retrieving metadata information from a IBM DB2 database.
  */
-class InformixSchema extends Schema
+class InformixSchema extends SqlSchema
 {
-    /**
-     * Underlying database provides field-level schema, i.e. SQL (true) vs NoSQL (false)
-     */
-    const PROVIDES_FIELD_SCHEMA = true;
-
     /**
      * @const string Quoting characters
      */
@@ -32,23 +26,10 @@ class InformixSchema extends Schema
      */
     const RIGHT_QUOTE_CHARACTER = '';
 
-    /**
-     * @inheritdoc
-     */
-    public function getSupportedResourceTypes()
-    {
-        return [
-            DbResourceTypes::TYPE_TABLE,
-            DbResourceTypes::TYPE_VIEW,
-            DbResourceTypes::TYPE_PROCEDURE,
-            DbResourceTypes::TYPE_FUNCTION
-        ];
-    }
-
     protected static function isUndiscoverableType($type)
     {
         switch ($type) {
-            case DbSimpleTypes::TYPE_BOOLEAN:
+            case DbSimpleTypes::TYPE_TIMESTAMP:
                 return true;
         }
 
@@ -82,6 +63,11 @@ class InformixSchema extends Schema
                 // check foreign tables
                 break;
 
+            case DbSimpleTypes::TYPE_TIME:
+                $info['type'] = 'datetime hour to fraction';
+                break;
+
+            case DbSimpleTypes::TYPE_DATETIME:
             case DbSimpleTypes::TYPE_TIMESTAMP:
                 $info['type'] = 'datetime year to fraction';
                 break;
@@ -106,14 +92,6 @@ class InformixSchema extends Schema
             case DbSimpleTypes::TYPE_USER_ID_ON_CREATE:
             case DbSimpleTypes::TYPE_USER_ID_ON_UPDATE:
                 $info['type'] = 'integer';
-                break;
-
-            case DbSimpleTypes::TYPE_DATETIME:
-                $info['type'] = 'datetime year to second';
-                break;
-
-            case DbSimpleTypes::TYPE_TIME:
-                $info['type'] = 'datetime hour to second';
                 break;
 
             case DbSimpleTypes::TYPE_FLOAT:
@@ -350,9 +328,11 @@ CASE
             WHEN (sc.collength > 0) THEN MOD(sc.collength,256)::INT 
             ELSE MOD(sc.collength+65536,256)::INT 
         END 
+    WHEN (sc.coltype IN (10,266,14,270)) THEN  
+        (sc.collength / 256)::INT 
     ELSE 
-        NULL 
-END maxlength, 
+        sc.collength 
+END length, 
 CASE 
     WHEN (sc.coltype IN (13,269,16,272)) THEN  
         CASE 
@@ -363,17 +343,29 @@ CASE
         NULL 
 END minlength, 
 CASE 
-    WHEN (sc.coltype IN (5,261,8,264) AND (sc.collength / 256) >= 1) 
-        THEN (sc.collength / 256)::INT  
+    WHEN (sc.coltype IN (5,261,8,264) AND (sc.collength / 256) >= 1) THEN
+        (sc.collength / 256)::INT  
     ELSE 
         NULL 
 END precision, 
 CASE 
-    WHEN (sc.coltype IN (5,261,8,264) AND (MOD(sc.collength, 256) <> 255)) 
-        THEN MOD(sc.collength, 256)::INT  
+    WHEN (sc.coltype IN (5,261,8,264) AND (MOD(sc.collength, 256) <> 255)) THEN
+        MOD(sc.collength, 256)::INT  
     ELSE 
         NULL 
 END scale, 
+CASE 
+    WHEN (sc.coltype IN (10,266,14,270)) THEN 
+        (MOD(sc.collength,256) / 16)::INT 
+    ELSE 
+        NULL 
+END first_qualifier, 
+CASE 
+    WHEN (sc.coltype IN (10,266,14,270)) THEN  
+        MOD(MOD(sc.collength,256), 16)::INT 
+    ELSE 
+        NULL 
+END last_qualifier, 
 CASE  
     WHEN (sc.coltype < 256) THEN 'Y' 
     WHEN (sc.coltype BETWEEN 256 AND 309) THEN 'N' 
@@ -432,7 +424,7 @@ MYSQL;
         $c->isPrimaryKey = array_get($column, 'is_primary_key', false);
         $c->isUnique = array_get($column, 'is_unique', false);
         $c->dbType = $column['typename'];
-        $c->size = isset($column['collength']) ? intval($column['collength']) : null;
+        $c->size = isset($column['length']) ? intval($column['length']) : null;
         $c->precision = isset($column['precision']) ? intval($column['precision']) : null;
         $c->scale = isset($column['scale']) ? intval($column['scale']) : null;
         $c->autoIncrement = (false !== strpos($c->dbType, 'serial'));
@@ -440,6 +432,21 @@ MYSQL;
         $c->fixedLength = $this->extractFixedLength($c->dbType);
         $c->supportsMultibyte = $this->extractMultiByteSupport($c->dbType);
         $this->extractType($c, $c->dbType);
+        switch ($c->type) {
+            case DbSimpleTypes::TYPE_DATETIME:
+                $firstQualifier = (int)array_get($column, 'first_qualifier');
+                $lastQualifier = (int)array_get($column, 'last_qualifier');
+                if ($firstQualifier >= 6) {
+                    $c->type = DbSimpleTypes::TYPE_TIME;
+                } elseif ($lastQualifier <= 4) {
+                    $c->type = DbSimpleTypes::TYPE_DATE;
+                }
+                if ($lastQualifier > 10) {
+                    $c->precision = $lastQualifier - 10;
+                }
+            break;
+        }
+
         if (is_string($column['default'])) {
             $column['default'] = trim($column['default'], '\' ');
         }
@@ -874,6 +881,31 @@ MYSQL;
         }
     }
 
+    public static function getNativeDateTimeFormat($type)
+    {
+        switch (strtolower(strval($type))) {
+            case DbSimpleTypes::TYPE_DATE:
+                return 'Y-m-d';
+
+            case DbSimpleTypes::TYPE_TIME:
+                return 'H:i:s.u';
+            case DbSimpleTypes::TYPE_TIME_TZ:
+                return 'H:i:s.u P';
+
+            case DbSimpleTypes::TYPE_DATETIME:
+            case DbSimpleTypes::TYPE_TIMESTAMP:
+            case DbSimpleTypes::TYPE_TIMESTAMP_ON_CREATE:
+            case DbSimpleTypes::TYPE_TIMESTAMP_ON_UPDATE:
+                return 'Y-m-d H:i:s.u';
+
+            case DbSimpleTypes::TYPE_DATETIME_TZ:
+            case DbSimpleTypes::TYPE_TIMESTAMP_TZ:
+                return 'Y-m-d H:i:s.u P';
+        }
+
+        return null;
+    }
+
     public function getTimestampForSet()
     {
         return $this->connection->raw('(CURRENT)');
@@ -895,55 +927,10 @@ MYSQL;
         return $value;
     }
 
-    /**
-     * @inheritdoc
-     */
     protected function getFunctionStatement(RoutineSchema $routine, array $param_schemas, array &$values)
     {
-        switch ($routine->returnType) {
-            case DbSimpleTypes::TYPE_ROW:
-            case DbSimpleTypes::TYPE_TABLE:
-                $paramStr = $this->getRoutineParamString($param_schemas, $values);
+        $paramStr = $this->getRoutineParamString($param_schemas, $values);
 
-                return "SELECT * from TABLE({$routine->quotedName}($paramStr))";
-                break;
-            default:
-                return parent::getFunctionStatement($routine, $param_schemas, $values) . ' FROM SYSIBM.SYSDUMMY1';
-                break;
-        }
-    }
-
-    protected function doRoutineBinding($statement, array $paramSchemas, array &$values)
-    {
-        foreach ($paramSchemas as $key => $paramSchema) {
-            $pdoType = $this->extractPdoType($paramSchema->type);
-            switch ($paramSchema->paramType) {
-                case 'IN':
-                    $this->bindValue($statement, ':' . $paramSchema->name, array_get($values, $key));
-                    break;
-                case 'INOUT':
-                    if (empty($values[$key]) && (\PDO::PARAM_STR === $pdoType)) {
-                        $values[$key] = str_repeat(" ", $paramSchema->length);
-                    }
-                    $this->bindParam(
-                        $statement, ':' . $paramSchema->name,
-                        $values[$key],
-                        $pdoType | \PDO::PARAM_INPUT_OUTPUT,
-                        $paramSchema->length
-                    );
-                    break;
-                case 'OUT':
-                    if (empty($values[$key]) && (\PDO::PARAM_STR === $pdoType)) {
-                        $values[$key] = str_repeat(" ", $paramSchema->length);
-                    }
-                    $this->bindParam(
-                        $statement, ':' . $paramSchema->name,
-                        $values[$key],
-                        $pdoType,
-                        $paramSchema->length
-                    );
-                    break;
-            }
-        }
+        return "CALL {$routine->quotedName}($paramStr)";
     }
 }
