@@ -26,7 +26,7 @@ class InformixSchema extends SqlSchema
      */
     const RIGHT_QUOTE_CHARACTER = '';
 
-    protected static function isUndiscoverableType($type)
+    public static function isUndiscoverableType($type)
     {
         switch ($type) {
             case DbSimpleTypes::TYPE_TIMESTAMP:
