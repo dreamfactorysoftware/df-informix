@@ -444,7 +444,7 @@ MYSQL;
                 if ($lastQualifier > 10) {
                     $c->precision = $lastQualifier - 10;
                 }
-            break;
+                break;
         }
 
         if (is_string($column['default'])) {
@@ -674,9 +674,6 @@ MYSQL;
      */
     public function alterColumn($table, $column, $definition)
     {
-        $tableSchema = $this->getTable($table);
-        $columnSchema = $tableSchema->getColumn(rtrim($column));
-
         $allowNullNewType = !preg_match("/not +null/i", $definition);
 
         $definition = preg_replace("/ +(not)? *null/i", "", $definition);
@@ -685,12 +682,10 @@ MYSQL;
 ALTER TABLE $table ALTER COLUMN {$this->quoteColumnName($column)} SET DATA TYPE {$this->getColumnType($definition)}
 MYSQL;
 
-        if ($columnSchema->allowNull != $allowNullNewType) {
-            if ($allowNullNewType) {
-                $sql .= ' ALTER COLUMN ' . $this->quoteColumnName($column) . 'DROP NOT NULL';
-            } else {
-                $sql .= ' ALTER COLUMN ' . $this->quoteColumnName($column) . 'SET NOT NULL';
-            }
+        if ($allowNullNewType) {
+            $sql .= ' ALTER COLUMN ' . $this->quoteColumnName($column) . 'DROP NOT NULL';
+        } else {
+            $sql .= ' ALTER COLUMN ' . $this->quoteColumnName($column) . 'SET NOT NULL';
         }
 
         return $sql;
