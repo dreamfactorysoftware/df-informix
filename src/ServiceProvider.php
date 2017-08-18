@@ -1,7 +1,6 @@
 <?php
 namespace DreamFactory\Core\Informix;
 
-use DreamFactory\Core\Components\ServiceDocBuilder;
 use DreamFactory\Core\Components\DbSchemaExtensions;
 use DreamFactory\Core\Enums\ServiceTypeGroups;
 use DreamFactory\Core\Informix\Database\Connectors\InformixConnector;
@@ -15,8 +14,6 @@ use Illuminate\Database\DatabaseManager;
 
 class ServiceProvider extends \Illuminate\Support\ServiceProvider
 {
-    use ServiceDocBuilder;
-
     public function register()
     {
         // Add our database drivers
@@ -38,9 +35,6 @@ class ServiceProvider extends \Illuminate\Support\ServiceProvider
                     'description'     => 'Database service supporting IBM Informix SQL connections.',
                     'group'           => ServiceTypeGroups::DATABASE,
                     'config_handler'  => InformixDbConfig::class,
-                    'default_api_doc' => function ($service) {
-                        return $this->buildServiceDoc($service->id, Informix::getApiDocInfo($service));
-                    },
                     'factory'         => function ($config) {
                         return new Informix($config);
                     },
