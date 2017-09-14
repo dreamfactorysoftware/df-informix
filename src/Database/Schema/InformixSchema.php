@@ -256,16 +256,10 @@ class InformixSchema extends SqlSchema
             }
         }
 
-        $isUniqueKey = (isset($info['is_unique'])) ? filter_var($info['is_unique'], FILTER_VALIDATE_BOOLEAN) : false;
-        $isPrimaryKey =
-            (isset($info['is_primary_key'])) ? filter_var($info['is_primary_key'], FILTER_VALIDATE_BOOLEAN) : false;
-        if ($isPrimaryKey && $isUniqueKey) {
-            throw new \Exception('Unique and Primary designations not allowed simultaneously.');
-        }
-        if ($isUniqueKey) {
-            $definition .= ' UNIQUE';
-        } elseif ($isPrimaryKey) {
+        if (isset($info['is_primary_key']) && filter_var($info['is_primary_key'], FILTER_VALIDATE_BOOLEAN)) {
             $definition .= ' PRIMARY KEY';
+        } elseif (isset($info['is_unique']) && filter_var($info['is_unique'], FILTER_VALIDATE_BOOLEAN)) {
+            $definition .= ' UNIQUE';
         }
 
         return $definition;
@@ -464,7 +458,8 @@ MYSQL;
         $sql = <<<MYSQL
 SELECT st.tabname table_name, RTRIM(st.owner) table_schema, scon.constrname, sr.updrule, sr.delrule, 
 refst.tabname referenced_table_name, RTRIM(refst.owner) referenced_table_schema, refsc.idxname refconstrname, 
-sc.colname  column_name, pksc.colname  referenced_column_name 
+sc.colname  column_name, pksc.colname  referenced_column_name, 
+pu.constrtype constraint_type, pusc.colname constraint_column_name 
 FROM systables st 
 INNER JOIN sysconstraints scon ON st.tabid = scon.tabid 
 INNER JOIN sysreferences sr ON scon.constrid = sr.constrid 
@@ -474,10 +469,20 @@ INNER JOIN sysconstraints refsc ON sr.primary = refsc.constrid
 INNER JOIN sysindexes refsi ON refsc.idxname = refsi.idxname 
 LEFT OUTER JOIN syscolumns sc ON (ABS(si.part1) = sc.colno AND si.tabid = sc.tabid) 
 LEFT OUTER JOIN syscolumns pksc ON (ABS(refsi.part1) = pksc.colno AND refsi.tabid = pksc.tabid)
+LEFT OUTER JOIN sysconstraints pu ON pu.tabid = st.tabid AND pu.constrtype IN ('P','U')
+LEFT OUTER JOIN sysindexes pusi ON pu.idxname = pusi.idxname 
+LEFT OUTER JOIN syscolumns pusc ON (ABS(pusi.part1) = pusc.colno AND pusi.tabid = pusc.tabid AND pusc.colno = sc.colno)
 WHERE scon.constrtype = 'R';
 MYSQL;
 
-        return $this->connection->select($sql);
+        $refs = $this->connection->select($sql);
+        foreach ($refs as &$ref) {
+            if (is_null($ref->constraint_column_name)) {
+                $ref->constraint_type = null;
+            }
+        }
+
+        return $refs;
     }
 
     protected function findSchemaNames()
