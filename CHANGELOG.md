@@ -3,6 +3,8 @@ All notable changes to this project will be documented in this file.
 This project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
+
+## [0.3.0] - 2017-09-18
 ### Fixed
 - DF-1160 Correct resource name usage for procedures and functions when pulling parameters
 
@@ -22,6 +24,7 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 ## 0.1.0 - 2017-06-27
 First official release working with the new [df-core](https://github.com/dreamfactorysoftware/df-core) library.
 
-[Unreleased]: https://github.com/dreamfactorysoftware/df-informix/compare/0.2.0...HEAD
+[Unreleased]: https://github.com/dreamfactorysoftware/df-informix/compare/0.3.0...HEAD
+[0.3.0]: https://github.com/dreamfactorysoftware/df-informix/compare/0.2.0...0.3.0
 [0.2.0]: https://github.com/dreamfactorysoftware/df-informix/compare/0.1.1...0.2.0
 [0.1.1]: https://github.com/dreamfactorysoftware/df-informix/compare/0.1.0...0.1.1
