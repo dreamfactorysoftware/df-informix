@@ -493,11 +493,6 @@ MYSQL;
 
         $rows = array_map('trim', $this->selectColumn($sql));
 
-        $defaultSchema = $this->getDefaultSchema();
-        if (!empty($defaultSchema) && (false === array_search($defaultSchema, $rows))) {
-            $rows[] = $defaultSchema;
-        }
-
         return $rows;
     }
 
@@ -521,9 +516,6 @@ MYSQL;
         $params = (!empty($schema)) ? [':schema' => $schema] : [];
         $rows = $this->connection->select($sql, $params);
 
-        $defaultSchema = $this->getNamingSchema();
-        $addSchema = (!empty($schema) && ($defaultSchema !== $schema));
-
         $names = [];
         foreach ($rows as $row) {
             $row = array_change_key_case((array)$row, CASE_UPPER);
@@ -531,7 +523,7 @@ MYSQL;
             $schemaName = trim(isset($row['OWNER']) ? $row['OWNER'] : '');
             $resourceName = trim(isset($row['TABNAME']) ? $row['TABNAME'] : '');
             $internalName = $schemaName . '.' . $resourceName;
-            $name = ($addSchema) ? $internalName : $resourceName;
+            $name = $resourceName;
             $quotedName = $this->quoteTableName($schemaName) . '.' . $this->quoteTableName($resourceName);;
             $settings = compact('id', 'schemaName', 'resourceName', 'name', 'internalName', 'quotedName');
             $names[strtolower($name)] = new TableSchema($settings);
@@ -560,9 +552,6 @@ MYSQL;
         $params = (!empty($schema)) ? [':schema' => $schema] : [];
         $rows = $this->connection->select($sql, $params);
 
-        $defaultSchema = $this->getNamingSchema();
-        $addSchema = (!empty($schema) && ($defaultSchema !== $schema));
-
         $names = [];
         foreach ($rows as $row) {
             $row = array_change_key_case((array)$row, CASE_UPPER);
@@ -570,7 +559,7 @@ MYSQL;
             $schemaName = trim(isset($row['OWNER']) ? $row['OWNER'] : '');
             $resourceName = trim(isset($row['TABNAME']) ? $row['TABNAME'] : '');
             $internalName = $schemaName . '.' . $resourceName;
-            $name = ($addSchema) ? $internalName : $resourceName;
+            $name = $resourceName;
             $quotedName = $this->quoteTableName($schemaName) . '.' . $this->quoteTableName($resourceName);;
             $settings = compact('id', 'schemaName', 'resourceName', 'name', 'internalName', 'quotedName');
             $settings['isView'] = true;
@@ -603,22 +592,6 @@ MYSQL;
 
             $this->connection
                 ->statement("ALTER TABLE {$table->quotedName} ALTER COLUMN {$table->primaryKey} RESTART WITH $value");
-        }
-    }
-
-    /**
-     * Enables or disables integrity check.
-     *
-     * @param boolean $check  whether to turn on or off the integrity check.
-     * @param string  $schema the schema of the tables. Defaults to empty string, meaning the current or default schema.
-     */
-    public function checkIntegrity($check = true, $schema = '')
-    {
-        $enable = $check ? 'CHECKED' : 'UNCHECKED';
-        $tableNames = $this->getTableNames($schema);
-        $db = $this->connection;
-        foreach ($tableNames as $table) {
-            $db->statement("SET INTEGRITY FOR {$table->quotedName} ALL IMMEDIATE $enable");
         }
     }
 
@@ -720,9 +693,6 @@ SELECT PROCNAME, PROCID FROM SYSPROCEDURES WHERE {$where}
 MYSQL;
         $rows = $this->connection->select($sql, $bindings);
 
-        $defaultSchema = $this->getNamingSchema();
-        $addSchema = (!empty($schema) && ($defaultSchema !== $schema));
-
         $names = [];
         foreach ($rows as $row) {
             $row = array_change_key_case((array)$row, CASE_UPPER);
@@ -730,7 +700,7 @@ MYSQL;
             $resourceName = array_get($row, 'PROCNAME');
             $schemaName = $schema;
             $internalName = $schemaName . '.' . $resourceName;
-            $name = ($addSchema) ? $internalName : $resourceName;
+            $name = $resourceName;
             $quotedName = $this->quoteTableName($schemaName) . '.' . $this->quoteTableName($resourceName);
             $settings = compact('id', 'schemaName', 'resourceName', 'name', 'internalName', 'quotedName');
             $names[strtolower($name)] =
