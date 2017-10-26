@@ -1,7 +1,9 @@
 <?php
+
 namespace DreamFactory\Core\Informix;
 
 use DreamFactory\Core\Components\DbSchemaExtensions;
+use DreamFactory\Core\Enums\LicenseLevel;
 use DreamFactory\Core\Enums\ServiceTypeGroups;
 use DreamFactory\Core\Informix\Database\Connectors\InformixConnector;
 use DreamFactory\Core\Informix\Database\InformixConnection;
@@ -30,12 +32,13 @@ class ServiceProvider extends \Illuminate\Support\ServiceProvider
         $this->app->resolving('df.service', function (ServiceManager $df) {
             $df->addType(
                 new ServiceType([
-                    'name'            => 'informix',
-                    'label'           => 'IBM Informix',
-                    'description'     => 'Database service supporting IBM Informix SQL connections.',
-                    'group'           => ServiceTypeGroups::DATABASE,
-                    'config_handler'  => InformixDbConfig::class,
-                    'factory'         => function ($config) {
+                    'name'                  => 'informix',
+                    'label'                 => 'IBM Informix',
+                    'description'           => 'Database service supporting IBM Informix SQL connections.',
+                    'group'                 => ServiceTypeGroups::DATABASE,
+                    'subscription_required' => LicenseLevel::SILVER,
+                    'config_handler'        => InformixDbConfig::class,
+                    'factory'               => function ($config) {
                         return new Informix($config);
                     },
                 ])
