@@ -16,17 +16,9 @@ class InformixConnector extends Connector implements ConnectorInterface
     public function connect(array $config)
     {
         $dsn = $this->getDsn($config);
-
         $options = $this->getOptions($config);
-        $connection = $this->createConnection($dsn, $config, $options);
 
-        if (isset($config['schema'])) {
-            $schema = $config['schema'];
-
-            $connection->prepare("set schema $schema")->execute();
-        }
-
-        return $connection;
+        return $this->createConnection($dsn, $config, $options);
     }
 
     /**
