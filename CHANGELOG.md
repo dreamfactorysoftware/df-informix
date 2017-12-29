@@ -3,6 +3,14 @@ All notable changes to this project will be documented in this file.
 This project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
+## [0.5.0] - 2017-12-26
+### Added
+- DF-1224 Added ability to set different default limits (max_records_returned) per service
+- Added package discovery
+### Changed
+- DF-1150 Update copyright and support email
+- Separated resources from resource handlers
+
 ## [0.4.0] - 2017-11-03
 ### Changed
 - Change getNativeDateTimeFormat to handle column schema to detect detailed datetime format
@@ -30,7 +38,8 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 ## 0.1.0 - 2017-06-27
 First official release working with the new [df-core](https://github.com/dreamfactorysoftware/df-core) library.
 
-[Unreleased]: https://github.com/dreamfactorysoftware/df-informix/compare/0.4.0...HEAD
+[Unreleased]: https://github.com/dreamfactorysoftware/df-informix/compare/0.5.0...HEAD
+[0.5.0]: https://github.com/dreamfactorysoftware/df-informix/compare/0.4.0...0.5.0
 [0.4.0]: https://github.com/dreamfactorysoftware/df-informix/compare/0.3.0...0.4.0
 [0.3.0]: https://github.com/dreamfactorysoftware/df-informix/compare/0.2.0...0.3.0
 [0.2.0]: https://github.com/dreamfactorysoftware/df-informix/compare/0.1.1...0.2.0
