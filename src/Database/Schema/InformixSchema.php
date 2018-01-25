@@ -273,7 +273,7 @@ class InformixSchema extends SqlSchema
     /**
      * @inheritdoc
      */
-    protected function findColumns(TableSchema $table)
+    protected function loadTableColumns(TableSchema $table)
     {
         $params = [':id' => $table->id];
 
@@ -373,119 +373,126 @@ MYSQL;
 
         $columns = $this->connection->select($sql, $params);
 
-        $sql = <<<MYSQL
-SELECT si.idxname, si.idxtype, NULL::VARCHAR(128) constrname, NULL::CHAR(1) constrtype, sc.colname
-FROM sysindexes si 
-LEFT OUTER JOIN syscolumns sc ON (ABS(si.part1) = sc.colno AND si.tabid = sc.tabid) 
-WHERE si.tabid = :id AND si.idxname NOT LIKE ' ' || si.tabid || '_%' 
-UNION 
-SELECT si.idxname, si.idxtype, ctr.constrname, ctr.constrtype, sc.colname
-FROM sysconstraints ctr 
-LEFT OUTER JOIN sysindexes si ON (si.tabid = ctr.tabid AND si.idxname = ctr.idxname) 
-LEFT OUTER JOIN syscolumns sc ON (ABS(si.part1) = sc.colno AND si.tabid = sc.tabid) 
-WHERE ctr.tabid = :id2 AND ctr.idxname IS NOT NULL AND ctr.constrtype <> 'R';
-MYSQL;
+        foreach ($columns as $column) {
+            $column = array_change_key_case((array)$column, CASE_LOWER);
+            $c = new ColumnSchema(['name' => $column['colname']]);
+            $c->quotedName = $this->quoteColumnName($c->name);
+            $c->allowNull = ($column['nulls'] == 'Y');
+            $c->isPrimaryKey = array_get($column, 'is_primary_key', false);
+            $c->isUnique = array_get($column, 'is_unique', false);
+            $c->dbType = $column['typename'];
+            $c->size = isset($column['length']) ? intval($column['length']) : null;
+            $c->precision = isset($column['precision']) ? intval($column['precision']) : null;
+            $c->scale = isset($column['scale']) ? intval($column['scale']) : null;
+            $c->autoIncrement = (false !== strpos($c->dbType, 'serial'));
 
-        $params[':id2'] = $table->id;
-        $indexes = $this->connection->select($sql, $params);
-        foreach ($indexes as $index) {
-            foreach ($columns as &$column) {
-                if (data_get($index, 'colname') === data_get($column, 'colname')) {
-                    if ('P' === data_get($index, 'constrtype')) {
-                        $column->is_primary_key = true;
-                    } elseif ('U' === data_get($index, 'constrtype')) {
-                        $column->is_unique = true;
+            $c->fixedLength = $this->extractFixedLength($c->dbType);
+            $c->supportsMultibyte = $this->extractMultiByteSupport($c->dbType);
+            $this->extractType($c, $c->dbType);
+            switch ($c->type) {
+                case DbSimpleTypes::TYPE_DATETIME:
+                    $firstQualifier = (int)array_get($column, 'first_qualifier');
+                    $lastQualifier = (int)array_get($column, 'last_qualifier');
+                    if ($firstQualifier >= 6) {
+                        $c->type = DbSimpleTypes::TYPE_TIME;
+                    } elseif ($lastQualifier <= 4) {
+                        $c->type = DbSimpleTypes::TYPE_DATE;
+                    }
+                    if ($lastQualifier > 10) {
+                        $c->precision = $lastQualifier - 10;
+                    }
+                    break;
+            }
+
+            if (is_string($column['default'])) {
+                $column['default'] = trim($column['default'], '\' ');
+            }
+
+            $this->extractDefault($c, $column['default']);
+
+            if ($c->isPrimaryKey) {
+                if ($c->autoIncrement) {
+                    $table->sequenceName = array_get($column, 'sequence', $c->name);
+                    if ((DbSimpleTypes::TYPE_INTEGER === $c->type)) {
+                        $c->type = DbSimpleTypes::TYPE_ID;
                     }
                 }
+                $table->addPrimaryKey($c->name);
             }
+            $table->addColumn($c);
         }
 
         return $columns;
     }
 
     /**
-     * Creates a table column.
-     *
-     * @param array $column column metadata
-     *
-     * @return ColumnSchema normalized column metadata
-     */
-    protected function createColumn($column)
-    {
-        $c = new ColumnSchema(['name' => $column['colname']]);
-        $c->quotedName = $this->quoteColumnName($c->name);
-        $c->allowNull = ($column['nulls'] == 'Y');
-        $c->isPrimaryKey = array_get($column, 'is_primary_key', false);
-        $c->isUnique = array_get($column, 'is_unique', false);
-        $c->dbType = $column['typename'];
-        $c->size = isset($column['length']) ? intval($column['length']) : null;
-        $c->precision = isset($column['precision']) ? intval($column['precision']) : null;
-        $c->scale = isset($column['scale']) ? intval($column['scale']) : null;
-        $c->autoIncrement = (false !== strpos($c->dbType, 'serial'));
-
-        $c->fixedLength = $this->extractFixedLength($c->dbType);
-        $c->supportsMultibyte = $this->extractMultiByteSupport($c->dbType);
-        $this->extractType($c, $c->dbType);
-        switch ($c->type) {
-            case DbSimpleTypes::TYPE_DATETIME:
-                $firstQualifier = (int)array_get($column, 'first_qualifier');
-                $lastQualifier = (int)array_get($column, 'last_qualifier');
-                if ($firstQualifier >= 6) {
-                    $c->type = DbSimpleTypes::TYPE_TIME;
-                } elseif ($lastQualifier <= 4) {
-                    $c->type = DbSimpleTypes::TYPE_DATE;
-                }
-                if ($lastQualifier > 10) {
-                    $c->precision = $lastQualifier - 10;
-                }
-                break;
-        }
-
-        if (is_string($column['default'])) {
-            $column['default'] = trim($column['default'], '\' ');
-        }
-
-        $this->extractDefault($c, $column['default']);
-
-        return $c;
-    }
-
-    /**
      * @inheritdoc
      */
-    protected function findTableReferences()
+    protected function getTableConstraints($schema = '')
     {
-        $sql = <<<MYSQL
-SELECT st.tabname table_name, RTRIM(st.owner) table_schema, scon.constrname, sr.updrule, sr.delrule, 
-refst.tabname referenced_table_name, RTRIM(refst.owner) referenced_table_schema, refsc.idxname refconstrname, 
-sc.colname  column_name, pksc.colname  referenced_column_name, 
-pu.constrtype constraint_type, pusc.colname constraint_column_name 
-FROM systables st 
-INNER JOIN sysconstraints scon ON st.tabid = scon.tabid 
-INNER JOIN sysreferences sr ON scon.constrid = sr.constrid 
-INNER JOIN systables refst ON sr.ptabid = refst.tabid 
-INNER JOIN sysindexes si ON scon.idxname = si.idxname 
-INNER JOIN sysconstraints refsc ON sr.primary = refsc.constrid 
-INNER JOIN sysindexes refsi ON refsc.idxname = refsi.idxname 
-LEFT OUTER JOIN syscolumns sc ON (ABS(si.part1) = sc.colno AND si.tabid = sc.tabid) 
-LEFT OUTER JOIN syscolumns pksc ON (ABS(refsi.part1) = pksc.colno AND refsi.tabid = pksc.tabid)
-LEFT OUTER JOIN sysconstraints pu ON pu.tabid = st.tabid AND pu.constrtype IN ('P','U')
-LEFT OUTER JOIN sysindexes pusi ON pu.idxname = pusi.idxname 
-LEFT OUTER JOIN syscolumns pusc ON (ABS(pusi.part1) = pusc.colno AND pusi.tabid = pusc.tabid AND pusc.colno = sc.colno)
-WHERE scon.constrtype = 'R';
-MYSQL;
-
-        $refs = $this->connection->select($sql);
-        foreach ($refs as &$ref) {
-            if (is_null($ref->constraint_column_name)) {
-                $ref->constraint_type = null;
-            }
+        if (is_array($schema)) {
+            $schema = implode("','", $schema);
         }
 
-        return $refs;
+        $sql = <<<SQL
+SELECT scon.constrname constraint_name, scon.constrtype constraint_type, 
+st.tabname table_name, RTRIM(st.owner) table_schema, 
+sc1.colname column_name1, sc2.colname column_name2, sc3.colname column_name3, sc4.colname column_name4,
+rst.tabname referenced_table_name, RTRIM(rst.owner) referenced_table_schema, 
+rsc1.colname referenced_column_name1, rsc2.colname referenced_column_name2, 
+rsc3.colname referenced_column_name3, rsc4.colname referenced_column_name4, 
+sref.updrule update_rule, sref.delrule delete_rule
+FROM sysconstraints scon 
+INNER JOIN systables st ON st.tabid = scon.tabid
+INNER JOIN sysindexes si ON scon.idxname = si.idxname 
+LEFT OUTER JOIN syscolumns sc1 ON (ABS(si.part1) = sc1.colno AND si.tabid = sc1.tabid) 
+LEFT OUTER JOIN syscolumns sc2 ON (ABS(si.part2) = sc2.colno AND si.tabid = sc2.tabid) 
+LEFT OUTER JOIN syscolumns sc3 ON (ABS(si.part3) = sc3.colno AND si.tabid = sc3.tabid) 
+LEFT OUTER JOIN syscolumns sc4 ON (ABS(si.part4) = sc4.colno AND si.tabid = sc4.tabid) 
+LEFT OUTER JOIN sysreferences sref ON scon.constrid = sref.constrid 
+LEFT OUTER JOIN systables rst ON sref.ptabid = rst.tabid 
+LEFT OUTER JOIN sysconstraints rscon ON sref.primary = rscon.constrid 
+LEFT OUTER JOIN sysindexes rsi ON rscon.idxname = rsi.idxname 
+LEFT OUTER JOIN syscolumns rsc1 ON (ABS(rsi.part1) = rsc1.colno AND rsi.tabid = rsc1.tabid)
+LEFT OUTER JOIN syscolumns rsc2 ON (ABS(rsi.part2) = rsc2.colno AND rsi.tabid = rsc2.tabid)
+LEFT OUTER JOIN syscolumns rsc3 ON (ABS(rsi.part3) = rsc3.colno AND rsi.tabid = rsc3.tabid)
+LEFT OUTER JOIN syscolumns rsc4 ON (ABS(rsi.part4) = rsc4.colno AND rsi.tabid = rsc4.tabid)
+WHERE scon.owner IN ('{$schema}');
+SQL;
+
+        $results = $this->connection->select($sql);
+        $constraints = [];
+        foreach ($results as $row) {
+            $row = array_change_key_case((array)$row, CASE_LOWER);
+            $ts = strtolower($row['table_schema']);
+            $tn = strtolower($row['table_name']);
+            $cn = strtolower($row['constraint_name']);
+            if ('R' === $row['constraint_type']) {
+                $row['constraint_type'] = 'foreign key';
+            }
+            $cols = [];
+            $refCols = [];
+            for ($i = 1; $i <= 16; $i++) {
+                if (isset($row['column_name' . $i])) {
+                    $cols[] = $row['column_name' . $i];
+                    unset($row['column_name'.$i]);
+                }
+                if (isset($row['referenced_column_name' . $i])) {
+                    $refCols[] = $row['referenced_column_name' . $i];
+                    unset($row['referenced_column_name'.$i]);
+                }
+            }
+            $row['column_name'] = $cols;
+            if (!empty($refCols)) {
+                $row['referenced_column_name'] = $refCols;
+            }
+            $constraints[$ts][$tn][$cn] = $row;
+        }
+
+        return $constraints;
     }
 
-    protected function findSchemaNames()
+    public function getSchemas()
     {
         $sql = <<<MYSQL
 SELECT USERNAME FROM SYSUSERS WHERE USERTYPE != 'X' ORDER BY USERNAME;
@@ -499,7 +506,7 @@ MYSQL;
     /**
      * @inheritdoc
      */
-    protected function findTableNames($schema = '')
+    protected function getTableNames($schema = '')
     {
         $sql = <<<MYSQL
 SELECT OWNER, TABNAME, TABID FROM SYSTABLES WHERE TABTYPE = 'T'
@@ -535,7 +542,7 @@ MYSQL;
     /**
      * @inheritdoc
      */
-    protected function findViewNames($schema = '')
+    protected function getViewNames($schema = '')
     {
         $sql = <<<MYSQL
 SELECT OWNER, TABNAME, TABID FROM SYSTABLES WHERE TABTYPE = 'V'
@@ -670,16 +677,14 @@ MYSQL;
     }
 
     /**
-     * @param boolean $refresh if we need to refresh schema cache.
-     *
-     * @return string default schema.
+     * @inheritdoc
      */
-    public function getDefaultSchema($refresh = false)
+    public function getDefaultSchema()
     {
         return $this->getUserName();
     }
 
-    protected function findRoutineNames($type, $schema = '')
+    protected function getRoutineNames($type, $schema = '')
     {
         $bindings = [':type' => (('PROCEDURE' === $type) ? 't' : 'f')];
         $where = "ISPROC = :type";

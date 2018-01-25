@@ -8,6 +8,22 @@ use Illuminate\Database\Query\Builder;
 class InformixGrammar extends Grammar
 {
     /**
+     * Wrap a single string in keyword identifiers.
+     *
+     * @param  string $value
+     *
+     * @return string
+     */
+    protected function wrapValue($value)
+    {
+        if ($value === '*') {
+            return $value;
+        }
+
+        return str_replace('"', '""', $value);
+    }
+
+    /**
      * @inheritdoc
      */
     public function compileSelect(Builder $query)
