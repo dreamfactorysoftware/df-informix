@@ -11,6 +11,13 @@ use Illuminate\Support\Fluent;
 class InformixGrammar extends Grammar
 {
     /**
+     * The name of the constant is determined by the search of that value in Informix documentation
+     * 
+     * @link https://www.ibm.com/support/pages/apar/IC65692
+     */
+    private const MAX_COL_SIZE = 16369;
+    
+    /**
      * The possible column modifiers.
      *
      * @var array
@@ -433,7 +440,7 @@ class InformixGrammar extends Grammar
      */
     protected function typeText(Fluent $column)
     {
-        $colLength = ($column->length ? $column->length : 16369);
+        $colLength = ($column->length ?: self::MAX_COL_SIZE);
 
         return "varchar($colLength)";
     }
@@ -447,7 +454,7 @@ class InformixGrammar extends Grammar
      */
     protected function typeMediumText(Fluent $column)
     {
-        $colLength = ($column->length ? $column->length : 16369);
+        $colLength = ($column->length ?: self::MAX_COL_SIZE);
 
         return "varchar($colLength)";
     }
@@ -461,7 +468,7 @@ class InformixGrammar extends Grammar
      */
     protected function typeLongText(Fluent $column)
     {
-        $colLength = ($column->length ? $column->length : 16369);
+        $colLength = ($column->length ?: self::MAX_COL_SIZE);
 
         return "varchar($colLength)";
     }

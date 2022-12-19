@@ -10,6 +10,7 @@ use DreamFactory\Core\Database\Schema\RoutineSchema;
 use DreamFactory\Core\Database\Schema\TableSchema;
 use DreamFactory\Core\Enums\DbSimpleTypes;
 use DreamFactory\Core\SqlDb\Database\Schema\SqlSchema;
+use Illuminate\Support\Arr;
 
 /**
  * Schema is the class for retrieving metadata information from a IBM DB2 database.
@@ -39,7 +40,7 @@ class InformixSchema extends SqlSchema
     protected function translateSimpleColumnTypes(array &$info)
     {
         // override this in each schema class
-        $type = (isset($info['type'])) ? $info['type'] : null;
+        $type = $info['type'] ?? null;
         switch (strtolower($type)) {
             // some types need massaging, some need other required properties
             case 'pk':
@@ -74,7 +75,7 @@ class InformixSchema extends SqlSchema
             case DbSimpleTypes::TYPE_TIMESTAMP_ON_CREATE:
                 $info['type'] = 'datetime year to fraction';
                 $info['allow_null'] = false;
-                $default = (isset($info['default'])) ? $info['default'] : null;
+                $default = $info['default'] ?? null;
                 if (!isset($default)) {
                     $info['default'] = 'current';
                 }
@@ -82,7 +83,7 @@ class InformixSchema extends SqlSchema
             case DbSimpleTypes::TYPE_TIMESTAMP_ON_UPDATE:
                 $info['type'] = 'datetime year to fraction';
                 $info['allow_null'] = false;
-                $default = (isset($info['default'])) ? $info['default'] : null;
+                $default = $info['default'] ?? null;
                 if (!isset($default)) {
                     $info['default'] = 'current';
                 }
@@ -109,7 +110,7 @@ class InformixSchema extends SqlSchema
 
             case DbSimpleTypes::TYPE_BOOLEAN:
                 $info['type'] = 'boolean';
-                $default = (isset($info['default'])) ? $info['default'] : null;
+                $default = $info['default'] ?? null;
                 if (isset($default)) {
                     // convert to 't' or 'f', where necessary
                     $info['default'] = (to_bool($default) ? "'t'" : "'f'");
@@ -146,13 +147,13 @@ class InformixSchema extends SqlSchema
     protected function validateColumnSettings(array &$info)
     {
         // override this in each schema class
-        $type = (isset($info['type'])) ? $info['type'] : null;
+        $type = $info['type'] ?? null;
         switch (strtolower($type)) {
             // some types need massaging, some need other required properties
             case 'smallint':
             case 'int':
             case 'bigint':
-                $default = (isset($info['default'])) ? $info['default'] : null;
+                $default = $info['default'] ?? null;
                 if (isset($default) && is_numeric($default)) {
                     $info['default'] = intval($default);
                 }
@@ -165,21 +166,15 @@ class InformixSchema extends SqlSchema
             case 'double':
                 if (!isset($info['type_extras'])) {
                     $length =
-                        (isset($info['length']))
-                            ? $info['length']
-                            : ((isset($info['precision'])) ? $info['precision']
-                            : null);
+                        $info['length'] ?? $info['precision'] ?? null;
                     if (!empty($length)) {
                         $scale =
-                            (isset($info['decimals']))
-                                ? $info['decimals']
-                                : ((isset($info['scale'])) ? $info['scale']
-                                : null);
+                            $info['decimals'] ?? $info['scale'] ?? null;
                         $info['type_extras'] = (!empty($scale)) ? "($length,$scale)" : "($length)";
                     }
                 }
 
-                $default = (isset($info['default'])) ? $info['default'] : null;
+                $default = $info['default'] ?? null;
                 if (isset($default) && is_numeric($default)) {
                     $info['default'] = floatval($default);
                 }
@@ -193,7 +188,7 @@ class InformixSchema extends SqlSchema
             case 'clob':
             case 'dbclob':
             case 'blob':
-                $length = (isset($info['length'])) ? $info['length'] : ((isset($info['size'])) ? $info['size'] : 255);
+                $length = $info['length'] ?? $info['size'] ?? 255;
                 if (isset($length)) {
                     $info['type_extras'] = "($length)";
                 }
@@ -202,13 +197,13 @@ class InformixSchema extends SqlSchema
             case 'time':
             case 'timestamp':
             case 'datetime':
-                $default = (isset($info['default'])) ? $info['default'] : null;
+                $default = $info['default'] ?? null;
                 if ('0000-00-00 00:00:00' == $default) {
                     // read back from MySQL has formatted zeros, can't send that back
                     $info['default'] = 0;
                 }
 
-                $length = (isset($info['length'])) ? $info['length'] : ((isset($info['size'])) ? $info['size'] : null);
+                $length = $info['length'] ?? $info['size'] ?? null;
                 if (isset($length)) {
                     $info['type_extras'] = "($length)";
                 }
@@ -224,7 +219,7 @@ class InformixSchema extends SqlSchema
      */
     protected function buildColumnDefinition(array $info)
     {
-        $type = (isset($info['type'])) ? $info['type'] : null;
+        $type = $info['type'] ?? null;
         $auto = (isset($info['auto_increment'])) ? filter_var($info['auto_increment'], FILTER_VALIDATE_BOOLEAN) : false;
         if ($auto) {
             switch ($type) {
@@ -234,14 +229,14 @@ class InformixSchema extends SqlSchema
             }
         }
 
-        $typeExtras = (isset($info['type_extras'])) ? $info['type_extras'] : null;
+        $typeExtras = $info['type_extras'] ?? null;
 
         $definition = $type . $typeExtras;
 
         $allowNull = (isset($info['allow_null'])) ? filter_var($info['allow_null'], FILTER_VALIDATE_BOOLEAN) : false;
         $definition .= ($allowNull) ? ' NULL' : ' NOT NULL';
 
-        $default = (isset($info['default'])) ? $info['default'] : null;
+        $default = $info['default'] ?? null;
         if (isset($default)) {
             $quoteDefault =
                 (isset($info['quote_default'])) ? filter_var($info['quote_default'], FILTER_VALIDATE_BOOLEAN) : false;
@@ -378,8 +373,8 @@ MYSQL;
             $c = new ColumnSchema(['name' => $column['colname']]);
             $c->quotedName = $this->quoteColumnName($c->name);
             $c->allowNull = ($column['nulls'] == 'Y');
-            $c->isPrimaryKey = array_get($column, 'is_primary_key', false);
-            $c->isUnique = array_get($column, 'is_unique', false);
+            $c->isPrimaryKey = Arr::get($column, 'is_primary_key', false);
+            $c->isUnique = Arr::get($column, 'is_unique', false);
             $c->dbType = $column['typename'];
             $c->size = isset($column['length']) ? intval($column['length']) : null;
             $c->precision = isset($column['precision']) ? intval($column['precision']) : null;
@@ -391,8 +386,8 @@ MYSQL;
             $this->extractType($c, $c->dbType);
             switch ($c->type) {
                 case DbSimpleTypes::TYPE_DATETIME:
-                    $firstQualifier = (int)array_get($column, 'first_qualifier');
-                    $lastQualifier = (int)array_get($column, 'last_qualifier');
+                    $firstQualifier = (int)Arr::get($column, 'first_qualifier');
+                    $lastQualifier = (int)Arr::get($column, 'last_qualifier');
                     if ($firstQualifier >= 6) {
                         $c->type = DbSimpleTypes::TYPE_TIME;
                     } elseif ($lastQualifier <= 4) {
@@ -412,7 +407,7 @@ MYSQL;
 
             if ($c->isPrimaryKey) {
                 if ($c->autoIncrement) {
-                    $table->sequenceName = array_get($column, 'sequence', $c->name);
+                    $table->sequenceName = Arr::get($column, 'sequence', $c->name);
                     if ((DbSimpleTypes::TYPE_INTEGER === $c->type)) {
                         $c->type = DbSimpleTypes::TYPE_ID;
                     }
@@ -527,8 +522,8 @@ MYSQL;
         foreach ($rows as $row) {
             $row = array_change_key_case((array)$row, CASE_UPPER);
             $id = isset($row['TABID']) ? intval($row['TABID']) : null;
-            $schemaName = trim(isset($row['OWNER']) ? $row['OWNER'] : '');
-            $resourceName = trim(isset($row['TABNAME']) ? $row['TABNAME'] : '');
+            $schemaName = trim($row['OWNER'] ?? '');
+            $resourceName = trim($row['TABNAME'] ?? '');
             $internalName = $schemaName . '.' . $resourceName;
             $name = $resourceName;
             $quotedName = $this->quoteTableName($schemaName) . '.' . $this->quoteTableName($resourceName);;
@@ -563,8 +558,8 @@ MYSQL;
         foreach ($rows as $row) {
             $row = array_change_key_case((array)$row, CASE_UPPER);
             $id = isset($row['TABID']) ? intval($row['TABID']) : null;
-            $schemaName = trim(isset($row['OWNER']) ? $row['OWNER'] : '');
-            $resourceName = trim(isset($row['TABNAME']) ? $row['TABNAME'] : '');
+            $schemaName = trim($row['OWNER'] ?? '');
+            $resourceName = trim($row['TABNAME'] ?? '');
             $internalName = $schemaName . '.' . $resourceName;
             $name = $resourceName;
             $quotedName = $this->quoteTableName($schemaName) . '.' . $this->quoteTableName($resourceName);;
@@ -702,7 +697,7 @@ MYSQL;
         foreach ($rows as $row) {
             $row = array_change_key_case((array)$row, CASE_UPPER);
             $id = isset($row['PROCID']) ? intval($row['PROCID']) : null;
-            $resourceName = array_get($row, 'PROCNAME');
+            $resourceName = Arr::get($row, 'PROCNAME');
             $schemaName = $schema;
             $internalName = $schemaName . '.' . $resourceName;
             $name = $resourceName;
@@ -809,14 +804,14 @@ MYSQL;
         $rows = $this->connection->select($sql, $bindings);
         foreach ($rows as $row) {
             $row = array_change_key_case((array)$row, CASE_UPPER);
-            $paramName = array_get($row, 'PARAMNAME');
-            $dbType = array_get($row, 'TYPENAME');
+            $paramName = Arr::get($row, 'PARAMNAME');
+            $dbType = Arr::get($row, 'TYPENAME');
             $simpleType = static::extractSimpleType($dbType);
-            $pos = intval(array_get($row, 'PARAMID'));
-            $length = (isset($row['PARAMLEN']) ? intval(array_get($row, 'PARAMLEN')) : null);
-            $precision = (isset($row['PRECISION']) ? intval(array_get($row, 'PRECISION')) : null);
-            $scale = (isset($row['SCALE']) ? intval(array_get($row, 'SCALE')) : null);
-            switch ($paramType = strtoupper(trim(array_get($row, 'PARAMTYPE', '')))) {
+            $pos = intval(Arr::get($row, 'PARAMID'));
+            $length = (isset($row['PARAMLEN']) ? intval(Arr::get($row, 'PARAMLEN')) : null);
+            $precision = (isset($row['PRECISION']) ? intval(Arr::get($row, 'PRECISION')) : null);
+            $scale = (isset($row['SCALE']) ? intval(Arr::get($row, 'SCALE')) : null);
+            switch ($paramType = strtoupper(trim(Arr::get($row, 'PARAMTYPE', '')))) {
                 case 'IN':
                 case 'INOUT':
                 case 'OUT':
@@ -830,7 +825,7 @@ MYSQL;
                             'length'        => $length,
                             'precision'     => $precision,
                             'scale'         => $scale,
-                            'default_value' => array_get($row, 'DEFAULT'),
+                            'default_value' => Arr::get($row, 'DEFAULT'),
                         ]
                     ));
                     break;

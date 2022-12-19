@@ -5,6 +5,7 @@ namespace DreamFactory\Core\Informix\Services;
 use DreamFactory\Core\SqlDb\Resources\StoredFunction;
 use DreamFactory\Core\SqlDb\Resources\StoredProcedure;
 use DreamFactory\Core\SqlDb\Services\SqlDb;
+use Illuminate\Support\Arr;
 
 /**
  * Class Informix
@@ -18,10 +19,10 @@ class Informix extends SqlDb
         parent::__construct($settings);
 
         $prefix = parent::getConfigBasedCachePrefix();
-        if ($service = array_get($this->config, 'service')) {
+        if ($service = Arr::get($this->config, 'service')) {
             $prefix = $service . $prefix;
         }
-        if ($server = array_get($this->config, 'server')) {
+        if ($server = Arr::get($this->config, 'server')) {
             $prefix = $server . $prefix;
         }
         $this->setConfigBasedCachePrefix($prefix);
