@@ -50,23 +50,37 @@ class InformixGrammar extends Grammar
     }
 
     /**
-     * Compile the query to determine the list of tables.
+     * Compile the query to determine if a given table exists.
+     *
+     * @param  string|null  $schema
+     * @param  string       $table
      *
      * @return string
      */
-    public function compileTableExists()
+    public function compileTableExists($schema, $table)
     {
-        return 'select * from information_schema.tables where table_schema = "?" and table_name = "?"';
+        return sprintf(
+            'select * from information_schema.tables where table_schema = %s and table_name = %s',
+            $schema ? $this->quoteString($schema) : "''",
+            $this->quoteString($table)
+        );
     }
 
     /**
      * Compile the query to determine the list of columns.
      *
+     * @param  string|null  $schema
+     * @param  string       $table
+     *
      * @return string
      */
-    public function compileColumnExists()
+    public function compileColumnExists($schema, $table)
     {
-        return 'select column_name from information_schema.columns where table_schema = "?" and table_name = "?"';
+        return sprintf(
+            'select column_name from information_schema.columns where table_schema = %s and table_name = %s',
+            $schema ? $this->quoteString($schema) : "''",
+            $this->quoteString($table)
+        );
     }
 
     /**
