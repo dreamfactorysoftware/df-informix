@@ -425,9 +425,12 @@ MYSQL;
      */
     protected function getTableConstraints($schema = '')
     {
-        if (is_array($schema)) {
-            $schema = implode("','", $schema);
+        $schemas = is_array($schema) ? array_values($schema) : [$schema];
+        $schemas = array_values(array_filter($schemas, fn ($s) => $s !== '' && $s !== null));
+        if (empty($schemas)) {
+            return [];
         }
+        $placeholders = implode(',', array_fill(0, count($schemas), '?'));
 
         $sql = <<<SQL
 SELECT scon.constrname constraint_name, scon.constrtype constraint_type, 
@@ -452,10 +455,10 @@ LEFT OUTER JOIN syscolumns rsc1 ON (ABS(rsi.part1) = rsc1.colno AND rsi.tabid = 
 LEFT OUTER JOIN syscolumns rsc2 ON (ABS(rsi.part2) = rsc2.colno AND rsi.tabid = rsc2.tabid)
 LEFT OUTER JOIN syscolumns rsc3 ON (ABS(rsi.part3) = rsc3.colno AND rsi.tabid = rsc3.tabid)
 LEFT OUTER JOIN syscolumns rsc4 ON (ABS(rsi.part4) = rsc4.colno AND rsi.tabid = rsc4.tabid)
-WHERE scon.owner IN ('{$schema}');
+WHERE scon.owner IN ({$placeholders});
 SQL;
 
-        $results = $this->connection->select($sql);
+        $results = $this->connection->select($sql, $schemas);
         $constraints = [];
         foreach ($results as $row) {
             $row = array_change_key_case((array)$row, CASE_LOWER);
