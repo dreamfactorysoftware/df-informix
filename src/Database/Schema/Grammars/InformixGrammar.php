@@ -3,7 +3,6 @@
 namespace DreamFactory\Core\Informix\Database\Schema\Grammars;
 
 use Illuminate\Database\Query\Expression;
-use Illuminate\Database\Connection;
 use Illuminate\Database\Schema\Grammars\Grammar;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Fluent;
@@ -86,13 +85,16 @@ class InformixGrammar extends Grammar
     /**
      * Compile a create table command.
      *
+     * Laravel 13's Blueprint::toSql() dispatches with only ($blueprint, $command);
+     * the legacy Connection arg was dropped framework-wide, so a required third
+     * parameter here throws ArgumentCountError on every create.
+     *
      * @param  \Illuminate\Database\Schema\Blueprint $blueprint
      * @param  \Illuminate\Support\Fluent            $command
-     * @param  \Illuminate\Database\Connection       $connection
      *
      * @return string
      */
-    public function compileCreate(Blueprint $blueprint, Fluent $command, Connection $connection)
+    public function compileCreate(Blueprint $blueprint, Fluent $command)
     {
         $columns = implode(', ', $this->getColumns($blueprint));
 
@@ -112,11 +114,10 @@ class InformixGrammar extends Grammar
      *
      * @param  \Illuminate\Database\Schema\Blueprint $blueprint
      * @param  \Illuminate\Support\Fluent            $command
-     * @param  \Illuminate\Database\Connection       $connection
      *
      * @return string
      */
-    public function compileLabel(Blueprint $blueprint, Fluent $command, Connection $connection)
+    public function compileLabel(Blueprint $blueprint, Fluent $command)
     {
         return 'label on table ' . $this->wrapTable($blueprint) . ' is \'' . $command->label . '\'';
     }
